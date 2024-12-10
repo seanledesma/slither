@@ -25,6 +25,7 @@ typedef struct Snake {
     Vector2 abovePos;
     Vector2 pos;
     Vector2 speed;
+    Vector2 nextSpeed; // simple buffer for move commands
     int length;
     bool state;
 } Snake;
@@ -48,7 +49,7 @@ Vector2 ScreenToGrid(Vector2 screenCoords, GridView view) {
 }
 
 
-void updateGrid() {
+void updateGrid(Snake* snake, Vector2 fruit) {
     // clear nextGrid
     //memset(nextGrid, 0, sizeof(nextGrid));
 
@@ -57,7 +58,14 @@ void updateGrid() {
         for (int j = 0; j < gridHeight; j++) {
 
             //snake logic goes here
-            //if (snake)
+            if (i == (int)snake[0].pos.x && 
+                i == (int)fruit.x &&
+                j == (int)snake[0].pos.y &&
+                j == (int)fruit.x) {
+
+                snake[0].length++;
+                snake[snake[0].length].state = ALIVE;
+            }
         }
     }
     // update cells in one go
@@ -76,7 +84,7 @@ void updateSnake(Snake* snake) {
     }
 
 
-    for (int i = 0; i < snake[0].length; i++) {
+    for (int i = 0; i < sizeof(&snake) / sizeof(&snake[0]); i++) {
         if (snake[i].state == ALIVE) {
             // clear old grid pos if withing boundary 
             grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = false;
@@ -102,10 +110,10 @@ void updateSnake(Snake* snake) {
 int main(void) {
     InitWindow(screenWidth, screenHeight, "GRID");
     SetTargetFPS(60);
-
+    
     bool isPaused = false;
     float updateTimer = 0.0f;
-    float updateInterval = 0.5f;
+    float updateInterval = 0.3f;
 
     GridView view = {
         .offset = (Vector2) { 
@@ -115,13 +123,20 @@ int main(void) {
         .zoom = 0.9f,
     };
 
+    Vector2 fruit = { GetRandomValue(0 , gridWidth) , GetRandomValue(0 , gridHeight) };
+    // start somewhere in the middle
+    Vector2 startPos = { GetRandomValue((gridWidth / 6) , (gridWidth / 2)) , 
+                         GetRandomValue((gridHeight / 6) , (gridHeight / 2)) };
+    Vector2 startSpeed = { 1, 0 };
+
     // make snake array is big as it could possibly get
     Snake snake[(gridWidth * gridHeight) + 1] = { 0 };
     // start with snake body size 2
     snake[0] = (Snake) {
-        .abovePos = (Vector2) {GetRandomValue(0, gridWidth - 1) , GetRandomValue(0, gridHeight - 1)},
-        .pos = snake[0].abovePos,
-        .speed = (Vector2) { 1, 0},
+        .abovePos = startPos,
+        .pos = startPos,
+        .speed = startSpeed,
+        .nextSpeed = startSpeed,
         .length = 2,
         .state = ALIVE,
     };
@@ -130,27 +145,23 @@ int main(void) {
         .pos = (Vector2) { snake[0].pos.x - 1, snake[0].pos.y },
         .state = ALIVE,
     };
-    // initialize both snake segments in grid
+    // initialize both starting snake segments in grid
     grid[(int)snake[0].pos.x][(int)snake[0].pos.y] = true;
     grid[(int)snake[1].pos.x][(int)snake[1].pos.y] = true;
 
     while(!WindowShouldClose()) {
 
         if (IsKeyPressed(KEY_LEFT) && snake[0].speed.x != 1) {
-            snake[0].speed.x = -1;
-            snake[0].speed.y = 0;
+            snake[0].nextSpeed = (Vector2) { -1 , 0 };
         }
         if (IsKeyPressed(KEY_RIGHT) && snake[0].speed.x != -1) {
-            snake[0].speed.x = 1;
-            snake[0].speed.y = 0;
+            snake[0].nextSpeed = (Vector2) { 1 , 0 };
         }
         if (IsKeyPressed(KEY_UP) && snake[0].speed.y != 1) {
-            snake[0].speed.y = -1;
-            snake[0].speed.x = 0;
+            snake[0].nextSpeed = (Vector2) { 0 , -1 };
         }
         if (IsKeyPressed(KEY_DOWN) && snake[0].speed.y != -1) {
-            snake[0].speed.y = 1;
-            snake[0].speed.x = 0;
+            snake[0].nextSpeed = (Vector2) { 0 , 1 };
         }
 
         if (IsKeyPressed(KEY_SPACE)) {
@@ -160,8 +171,9 @@ int main(void) {
         if (!isPaused) {
             updateTimer += GetFrameTime();
             if (updateTimer >= updateInterval) {
+                snake[0].speed = snake[0].nextSpeed;
                 updateSnake(snake);
-                updateGrid();
+                updateGrid(snake, fruit);
                 updateTimer = 0.0f;
             }
         }
@@ -185,10 +197,13 @@ int main(void) {
             }
             for (int i = 0; i < sizeof(grid) / sizeof(grid[0]); i++) {
                 for (int j = 0; j < sizeof(grid[0]) / sizeof(grid[0][0]); j++) {
-                    if (grid[i][j]) {
+                    Vector2 recPos = GridToScreen((Vector2) { i,j }, view);
+                    Vector2 recSize = { scaleX * view.zoom, scaleY * view.zoom };
+                    if (i == (int)fruit.x && j == (int)fruit.y) {
+                        DrawRectangleV(recPos, recSize, RED);
+                    }
+                    else if (grid[i][j]) {
                         // fill in cells if alive (true)
-                        Vector2 recPos = GridToScreen((Vector2) { i , j }, view);
-                        Vector2 recSize = { scaleX * view.zoom, scaleY * view.zoom };
                         DrawRectangleV(recPos, recSize, WHITE);
                     }
                 }
