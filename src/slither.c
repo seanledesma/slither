@@ -5,8 +5,10 @@
 
 #define screenWidth 1100
 #define screenHeight 1000
-#define gridWidth 15
-#define gridHeight 15
+#define gridWidth 25
+#define gridHeight 25
+#define ALIVE 1
+#define DEAD 0
 
 const float scaleX = (float) screenWidth / gridWidth;
 const float scaleY = (float) screenHeight / gridHeight;
@@ -18,6 +20,14 @@ typedef struct GridView {
     Vector2 offset; //how far we are from (0,0)
     float zoom;
 } GridView;
+
+typedef struct Snake {
+    Vector2 abovePos;
+    Vector2 pos;
+    Vector2 speed;
+    int length;
+    bool state;
+} Snake;
 
 Vector2 GridToScreen (Vector2 gridCoords, GridView view) {
     Vector2 screenCoords = { 
@@ -47,10 +57,46 @@ void updateGrid() {
         for (int j = 0; j < gridHeight; j++) {
 
             //snake logic goes here
+            //if (snake)
         }
     }
     // update cells in one go
     //memcpy(grid, nextGrid, sizeof(grid));
+}
+
+void updateSnake(Snake* snake) {
+    Vector2 nextHeadPos = (Vector2) { 
+        snake[0].pos.x + snake[0].speed.x, 
+        snake[0].pos.y + snake[0].speed.y 
+    };
+
+    if (nextHeadPos.x < 0 || nextHeadPos.x >= gridWidth ||
+        nextHeadPos.y < 0 || nextHeadPos.y >= gridHeight) {
+            // TODO: handle wall collision
+    }
+
+
+    for (int i = 0; i < snake[0].length; i++) {
+        if (snake[i].state == ALIVE) {
+            // clear old grid pos if withing boundary 
+            grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = false;
+
+            
+            Vector2 currPos = snake[i].pos;
+
+            // make head follow it's next pos, all others follow segment above
+            if (i == 0) {
+                snake[i].pos = nextHeadPos;
+            } else {
+                snake[i].pos = snake[i-1].abovePos;
+            }
+            
+            snake[i].abovePos = currPos;
+
+            // set new grid position of snake
+            grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = true;
+        }
+    }
 }
 
 int main(void) {
@@ -69,24 +115,42 @@ int main(void) {
         .zoom = 0.9f,
     };
 
+    // make snake array is big as it could possibly get
+    Snake snake[(gridWidth * gridHeight) + 1] = { 0 };
+    // start with snake body size 2
+    snake[0] = (Snake) {
+        .abovePos = (Vector2) {GetRandomValue(0, gridWidth - 1) , GetRandomValue(0, gridHeight - 1)},
+        .pos = snake[0].abovePos,
+        .speed = (Vector2) { 1, 0},
+        .length = 2,
+        .state = ALIVE,
+    };
+    snake[1] = (Snake) {
+        .abovePos = snake[0].pos,
+        .pos = (Vector2) { snake[0].pos.x - 1, snake[0].pos.y },
+        .state = ALIVE,
+    };
+    // initialize both snake segments in grid
+    grid[(int)snake[0].pos.x][(int)snake[0].pos.y] = true;
+    grid[(int)snake[1].pos.x][(int)snake[1].pos.y] = true;
+
     while(!WindowShouldClose()) {
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            Vector2 pos = GetMousePosition();
-            Vector2 worldPos = ScreenToGrid(pos, view);
-
-            int x = (int) worldPos.x;
-            int y = (int) worldPos.y;
-            // making sure mouse pos is within grid boundaries
-            if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) {
-                grid[x][y] = true;
-            }
+        if (IsKeyPressed(KEY_LEFT) && snake[0].speed.x != 1) {
+            snake[0].speed.x = -1;
+            snake[0].speed.y = 0;
         }
-
-        // center grid on key press C
-        if (IsKeyPressed(KEY_C)) {
-            view.offset.x = (screenWidth - (gridWidth * scaleX * view.zoom)) / 2.0f;
-            view.offset.y = (screenHeight - (gridHeight * scaleY * view.zoom)) / 2.0f;
+        if (IsKeyPressed(KEY_RIGHT) && snake[0].speed.x != -1) {
+            snake[0].speed.x = 1;
+            snake[0].speed.y = 0;
+        }
+        if (IsKeyPressed(KEY_UP) && snake[0].speed.y != 1) {
+            snake[0].speed.y = -1;
+            snake[0].speed.x = 0;
+        }
+        if (IsKeyPressed(KEY_DOWN) && snake[0].speed.y != -1) {
+            snake[0].speed.y = 1;
+            snake[0].speed.x = 0;
         }
 
         if (IsKeyPressed(KEY_SPACE)) {
@@ -95,7 +159,11 @@ int main(void) {
 
         if (!isPaused) {
             updateTimer += GetFrameTime();
-            updateGrid();
+            if (updateTimer >= updateInterval) {
+                updateSnake(snake);
+                updateGrid();
+                updateTimer = 0.0f;
+            }
         }
 
         BeginDrawing();
