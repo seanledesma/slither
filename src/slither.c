@@ -15,6 +15,7 @@ const float scaleY = (float) screenHeight / gridHeight;
 
 bool grid[gridWidth][gridHeight] = { false };  // needs to be a bool for game of life, dead or alive
 bool nextGrid[gridWidth][gridHeight] = { false }; // buffer grid to update grid at same time
+bool gameOver = false;
 
 typedef struct GridView {
     Vector2 offset; //how far we are from (0,0)
@@ -48,31 +49,18 @@ Vector2 ScreenToGrid(Vector2 screenCoords, GridView view) {
     return gridCoords;
 }
 
-
-void updateGrid(Snake* snake, Vector2 fruit) {
-    // clear nextGrid
-    //memset(nextGrid, 0, sizeof(nextGrid));
-
-
-    for (int i = 0; i < gridWidth; i++) {
-        for (int j = 0; j < gridHeight; j++) {
-
-            //snake logic goes here
-            if (i == (int)snake[0].pos.x && 
-                i == (int)fruit.x &&
-                j == (int)snake[0].pos.y &&
-                j == (int)fruit.x) {
-
-                snake[0].length++;
-                snake[snake[0].length].state = ALIVE;
-            }
-        }
-    }
-    // update cells in one go
-    //memcpy(grid, nextGrid, sizeof(grid));
+void clearGrid() {
+    memset(grid, 0, sizeof(grid));
 }
 
-void updateSnake(Snake* snake) {
+bool isFruitOnSnake(Vector2 pos, Snake* snake) {
+    for (int i = 0; i < snake[0].length; i++) {
+        if (Vector2Equals(pos, snake[i].pos)) return true;
+    }
+    return false;
+}
+
+void updateSnake(Snake* snake, Vector2* fruit) {
     Vector2 nextHeadPos = (Vector2) { 
         snake[0].pos.x + snake[0].speed.x, 
         snake[0].pos.y + snake[0].speed.y 
@@ -80,29 +68,46 @@ void updateSnake(Snake* snake) {
 
     if (nextHeadPos.x < 0 || nextHeadPos.x >= gridWidth ||
         nextHeadPos.y < 0 || nextHeadPos.y >= gridHeight) {
-            // TODO: handle wall collision
-    }
-
-
-    for (int i = 0; i < sizeof(&snake) / sizeof(&snake[0]); i++) {
-        if (snake[i].state == ALIVE) {
-            // clear old grid pos if withing boundary 
-            grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = false;
-
-            
-            Vector2 currPos = snake[i].pos;
-
-            // make head follow it's next pos, all others follow segment above
-            if (i == 0) {
-                snake[i].pos = nextHeadPos;
+            gameOver = true;
+    } else {
+        // eat fruit, grow big, new fruit locay
+        if (Vector2Equals(nextHeadPos, *fruit)) {
+            snake[snake[0].length] = (Snake){
+                .pos = snake[snake[0].length - 1].pos,
+                .abovePos = snake[snake[0].length - 1].pos,
+                .state = ALIVE,
+            };
+            snake[0].length += 1;
+            do {
+                fruit->x = GetRandomValue(0, gridWidth - 1);
+                fruit->y = GetRandomValue(0, gridHeight - 1);
+            } while (isFruitOnSnake(*fruit, snake));
+        }
+        
+        for (int i = 0; i < snake[0].length; i++) {
+            // if crashed into self, game over!
+            if (Vector2Equals(nextHeadPos, snake[i].pos)) {
+                gameOver = true;
+                return;
             } else {
-                snake[i].pos = snake[i-1].abovePos;
-            }
-            
-            snake[i].abovePos = currPos;
+                // clear old grid pos if withing boundary 
+                grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = false;
 
-            // set new grid position of snake
-            grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = true;
+                
+                Vector2 currPos = snake[i].pos;
+
+                // make head follow it's next pos, all others follow segment above
+                if (i == 0) {
+                    snake[i].pos = nextHeadPos;
+                } else {
+                    snake[i].pos = snake[i-1].abovePos;
+                }
+                
+                snake[i].abovePos = currPos;
+
+                // set new grid position of snake
+                grid[(int) snake[i].pos.x][(int) snake[i].pos.y] = true;
+            }
         }
     }
 }
@@ -123,7 +128,7 @@ int main(void) {
         .zoom = 0.9f,
     };
 
-    Vector2 fruit = { GetRandomValue(0 , gridWidth) , GetRandomValue(0 , gridHeight) };
+    
     // start somewhere in the middle
     Vector2 startPos = { GetRandomValue((gridWidth / 6) , (gridWidth / 2)) , 
                          GetRandomValue((gridHeight / 6) , (gridHeight / 2)) };
@@ -145,6 +150,16 @@ int main(void) {
         .pos = (Vector2) { snake[0].pos.x - 1, snake[0].pos.y },
         .state = ALIVE,
     };
+
+    // give fruit random spot that is not on snake or out of bounds
+    Vector2 fruit;
+    int fruitX;
+    int fruitY;
+    do {
+        fruit.x = GetRandomValue(0, gridWidth - 1);
+        fruit.y = GetRandomValue(0, gridHeight - 1);
+    } while (isFruitOnSnake(fruit, snake));
+        
     // initialize both starting snake segments in grid
     grid[(int)snake[0].pos.x][(int)snake[0].pos.y] = true;
     grid[(int)snake[1].pos.x][(int)snake[1].pos.y] = true;
@@ -164,6 +179,19 @@ int main(void) {
             snake[0].nextSpeed = (Vector2) { 0 , 1 };
         }
 
+        if (snake[0].length > 5) {
+            updateInterval = 0.25;
+        }
+        if (snake[0].length > 10) {
+            updateInterval = 0.2;
+        }
+        if (snake[0].length > 15) {
+            updateInterval = 0.15;
+        }
+        if (snake[0].length > 20) {
+            updateInterval = 0.1;
+        }
+
         if (IsKeyPressed(KEY_SPACE)) {
             isPaused = !isPaused;
         }
@@ -172,10 +200,37 @@ int main(void) {
             updateTimer += GetFrameTime();
             if (updateTimer >= updateInterval) {
                 snake[0].speed = snake[0].nextSpeed;
-                updateSnake(snake);
-                updateGrid(snake, fruit);
+                updateSnake(snake, &fruit);
                 updateTimer = 0.0f;
             }
+        }
+
+        if(IsKeyPressed(KEY_R)) {
+            gameOver = false;
+            clearGrid();
+            updateInterval = 0.3;
+            // reset snake
+            snake[0] = (Snake) {
+                .abovePos = startPos,
+                .pos = startPos,
+                .speed = startSpeed,
+                .nextSpeed = startSpeed,
+                .length = 2,
+                .state = ALIVE,
+            };
+            snake[1] = (Snake) {
+                .abovePos = snake[0].pos,
+                .pos = (Vector2) { snake[0].pos.x - 1, snake[0].pos.y },
+                .state = ALIVE,
+            };
+            // reset grid positions
+            grid[(int)snake[0].pos.x][(int)snake[0].pos.y] = true;
+            grid[(int)snake[1].pos.x][(int)snake[1].pos.y] = true;
+            // reset fruit
+            do {
+                fruit.x = GetRandomValue(0, gridWidth - 1);
+                fruit.y = GetRandomValue(0, gridHeight - 1);
+            } while (isFruitOnSnake(fruit, snake));
         }
 
         BeginDrawing();
@@ -200,7 +255,7 @@ int main(void) {
                     Vector2 recPos = GridToScreen((Vector2) { i,j }, view);
                     Vector2 recSize = { scaleX * view.zoom, scaleY * view.zoom };
                     if (i == (int)fruit.x && j == (int)fruit.y) {
-                        DrawRectangleV(recPos, recSize, RED);
+                        DrawRectangleV(recPos, recSize, GREEN);
                     }
                     else if (grid[i][j]) {
                         // fill in cells if alive (true)
@@ -209,7 +264,15 @@ int main(void) {
                 }
             }
 
+            if (gameOver) {
+                DrawRectangle(0, 0, screenWidth, screenHeight, RED);
+                DrawText("womp womp", screenWidth / 2.6, screenHeight / 2.6, 50, BLACK);
+                DrawText("press 'r' to retry", screenWidth / 2.7, screenHeight / 2.2, 30, BLACK);
+                DrawText(TextFormat("SCORE: %d", snake[0].length - 2), screenWidth / 2.3, screenHeight / 1.3, 25, BLACK);
+            }
+
             DrawText(isPaused ? "PAUSED" : "RUNNING", 10, 10, 20, WHITE);
+            DrawText(TextFormat("SCORE: %d", snake[0].length - 2), screenWidth / 1.2, 10, 20, WHITE);
 
         EndDrawing();
     }
