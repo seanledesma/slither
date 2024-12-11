@@ -153,8 +153,6 @@ int main(void) {
 
     // give fruit random spot that is not on snake or out of bounds
     Vector2 fruit;
-    int fruitX;
-    int fruitY;
     do {
         fruit.x = GetRandomValue(0, gridWidth - 1);
         fruit.y = GetRandomValue(0, gridHeight - 1);

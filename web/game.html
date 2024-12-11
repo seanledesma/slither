@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="utf-8">
+   <title>Retro Snake</title>
+   <style>
+       body {
+           margin: 0;
+           padding: 0;
+           min-height: 100vh;
+           background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+           font-family: 'Courier New', monospace;
+           color: #33ff33;
+       }
+
+       .container {
+           max-width: 1200px;
+           margin: 0 auto;
+           padding: 20px;
+       }
+
+       header {
+           text-align: center;
+           padding: 20px;
+           margin-bottom: 30px;
+       }
+
+       h1 {
+           font-size: 3em;
+           text-transform: uppercase;
+           text-shadow: 0 0 10px #33ff33;
+           margin: 0;
+           animation: glow 1.5s ease-in-out infinite alternate;
+       }
+
+       .game-container {
+           background: #000000;
+           padding: 20px;
+           border-radius: 10px;
+           border: 2px solid #33ff33;
+           box-shadow: 0 0 20px rgba(51, 255, 51, 0.3);
+           margin: 0 auto;
+           width: fit-content;
+       }
+
+       .controls {
+           text-align: center;
+           margin-top: 30px;
+           padding: 20px;
+           background: rgba(0, 0, 0, 0.5);
+           border-radius: 5px;
+       }
+
+       .snake-decoration {
+           font-size: 24px;
+           text-align: center;
+           margin: 20px 0;
+           color: #33ff33;
+       }
+
+       @keyframes glow {
+           from { text-shadow: 0 0 10px #33ff33; }
+           to { text-shadow: 0 0 20px #33ff33, 0 0 30px #33ff33; }
+       }
+
+       /* Emscripten required styles */
+       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+       .spinner { height: 30px; width: 30px; margin: 0; margin-top: 20px; margin-left: 20px; 
+           display: inline-block; vertical-align: top; animation: rotation 0.8s linear infinite;
+           border-left: 5px solid #33ff33; border-right: 5px solid #33ff33;
+           border-bottom: 5px solid #33ff33; border-top: 5px solid #787878;
+           border-radius: 100%; background-color: #000; }
+       @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+       #status { color: #33ff33; text-align: center; padding: 10px; }
+       #progress { width: 300px; margin: 10px auto; }
+       .emscripten_border { margin: 0 auto; }
+       canvas.emscripten { border: 0 none; background-color: #000; }
+   </style>
+</head>
+<body>
+   <div class="container">
+       <header>
+           <div class="snake-decoration">🐍</div>
+           <h1>Retro Snake</h1>
+           <div class="snake-decoration">~^~^~^~^~</div>
+       </header>
+
+       <div class="game-container">
+           <div class="spinner" id="spinner"></div>
+           <div class="emscripten" id="status">Downloading...</div>
+           <div class="emscripten">
+               <progress hidden id="progress" max="100" value="0"></progress>
+           </div>
+           <div class="emscripten_border">
+               <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+           </div>
+       </div>
+
+       <div class="controls">
+           <h2>Controls</h2>
+           <p>⬆️ ⬇️ ⬅️ ➡️ Arrow keys to move</p>
+           <p>SPACE to pause</p>
+           <p>R to restart</p>
+       </div>
+   </div>
+
+   <!-- Emscripten scripts -->
+   <script>
+       var statusElement = document.getElementById('status');
+       var progressElement = document.getElementById('progress');
+       var spinnerElement = document.getElementById('spinner');
+
+       var Module = {
+           print: function() {
+               var element = document.getElementById('output');
+               return function(text) {
+                   console.log(text);
+               };
+           }(),
+           canvas: (function() {
+               var canvas = document.getElementById('canvas');
+               canvas.addEventListener("webglcontextlost", function(e) {
+                   alert('WebGL context lost. You will need to reload the page.');
+                   e.preventDefault();
+               }, false);
+               return canvas;
+           })(),
+           setStatus: function(text) {
+               if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+               if (text === Module.setStatus.last.text) return;
+               var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+               var now = Date.now();
+               if (m && now - Module.setStatus.last.time < 30) return;
+               Module.setStatus.last.time = now;
+               Module.setStatus.last.text = text;
+               if (m) {
+                   text = m[1];
+                   progressElement.value = parseInt(m[2])*100;
+                   progressElement.max = parseInt(m[4])*100;
+                   progressElement.hidden = false;
+                   spinnerElement.hidden = false;
+               } else {
+                   progressElement.value = null;
+                   progressElement.max = null;
+                   progressElement.hidden = true;
+                   if (!text) spinnerElement.style.display = 'none';
+               }
+               statusElement.innerHTML = text;
+           },
+           totalDependencies: 0,
+           monitorRunDependencies: function(left) {
+               this.totalDependencies = Math.max(this.totalDependencies, left);
+               Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+           }
+       };
+       Module.setStatus('Downloading...');
+       window.onerror = function() {
+           Module.setStatus('Exception thrown, see JavaScript console');
+           spinnerElement.style.display = 'none';
+           Module.setStatus = function(text) {
+               if (text) console.error('[post-exception status] ' + text);
+           };
+       };
+   </script>
+   <script async src="game.js"></script>
+   
+   <!-- Prevent arrow keys from scrolling -->
+   <script>
+       window.addEventListener("keydown", function(e) {
+           if([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+               e.preventDefault();
+           }
+       }, false);
+   </script>
+</body>
+</html>
